@@ -1,4 +1,4 @@
-# Extended Kalman Filter Project Starter Code
+# Extended Kalman Filter Project 
 Self-Driving Car Engineer Nanodegree Program
 
 In this project you will utilize a kalman filter to estimate the state of a moving object of interest with noisy lidar and radar measurements. Passing the project requires obtaining RMSE values that are lower than the tolerance outlined in the project rubric. 
@@ -65,6 +65,135 @@ Here is the main protocol that main.cpp uses for uWebSocketIO in communicating w
 3. Compile: `cmake .. && make` 
    * On windows, you may need to run: `cmake .. -G "Unix Makefiles" && make`
 4. Run it: `./ExtendedKF `
+
+## Steps
+
+1. Initialization
+
+   ```c++
+   is_initialized_ = false;
+   previous_timestamp_ = 0;
+   // initializing matrices
+   R_laser_ = MatrixXd(2, 2);
+   R_radar_ = MatrixXd(3, 3);
+   H_laser_ = MatrixXd(2, 4);
+   Hj_ = MatrixXd(3, 4);
+   //measurement covariance matrix - laser
+   R_laser_ << 0.0225, 0,
+   0, 0.0225;
+   //measurement covariance matrix - radar
+   R_radar_ << 0.09, 0, 0,
+   0, 0.0009, 0,
+   0, 0, 0.09;
+   // Initialize P
+   ekf_.P_ = MatrixXd(4, 4);
+   ekf_.P_ << 1, 0, 0, 0,
+   0, 1, 0, 0,
+   0, 0, 1000, 0,
+   0, 0, 0, 1000;
+   H_laser_ << 1, 0, 0, 0,
+   0, 1, 0, 0;
+   ```
+
+2. Prediction
+
+   ```c++
+   x_ = F_ * x_;
+   MatrixXd Ft = F_.transpose();
+   P_ = F_ * P_ * Ft + Q_;
+   ```
+
+3. Radar Measurement update
+
+   ```c++
+   void KalmanFilter::UpdateEKF(const VectorXd &z) {
+       /**
+        * TODO: update the state by using Extended Kalman Filter equations
+        */
+       double px = x_(0);
+       double py = x_(1);
+       double vx = x_(2);
+       double vy = x_(3);
+       // Coordinate conversion from Cartesian coordinates to Polar coordinates
+       double rho = sqrt(px*px + py*py);
+       double theta = atan2(py, px);
+       double rho_dot = (px*vx + py*vy) / rho;
+       VectorXd h = VectorXd(3);
+       h << rho, theta, rho_dot;
+       VectorXd y = z - h;
+       // Nominalization of angle
+       while (y(1)>M_PI) y(1)-=2*M_PI;
+       while (y(1)<-M_PI) y(1)+=2*M_PI;
+   
+       MatrixXd Ht = H_.transpose();
+       MatrixXd S = H_ * P_ * Ht + R_;
+       MatrixXd Si = S.inverse();
+       MatrixXd K =  P_ * Ht * Si;
+   
+       x_ = x_ + (K * y);
+       int x_size = x_.size();
+       MatrixXd I = MatrixXd::Identity(x_size, x_size);
+       P_ = (I - K * H_) * P_;
+   
+   }
+   ```
+
+4. Lidar Measurement update
+
+   ```c++
+   void KalmanFilter::Update(const VectorXd &z) {
+       /**
+        * TODO: update the state by using Kalman Filter equations
+        */
+       VectorXd z_pred = H_ * x_;
+       VectorXd y = z - z_pred;;
+       MatrixXd Ht = H_.transpose();
+       MatrixXd S = H_ * P_ * Ht + R_;
+       MatrixXd Si = S.inverse();
+       MatrixXd K = P_ * Ht * Si;
+   
+       x_ = x_ + K * y;
+       int x_size = x_.size();
+       MatrixXd I = MatrixXd::Identity(x_size, x_size);
+       P_ = (I - K * H_) * P_;
+   }
+   ```
+
+5. Evaluation Kalman Filter Performance
+
+   ```c++
+   MatrixXd Tools::CalculateJacobian(const VectorXd& x_state) {
+     /**
+      * TODO:
+      * Calculate a Jacobian here.
+      */
+       MatrixXd Hj(3,4);
+      // state parameters
+       double px = x_state(0);
+       double py = x_state(1);
+       double vx = x_state(2);
+       double vy = x_state(3);
+   
+       // preparation of Jacobian terms
+       double c1 = px*px+py*py;
+       double c2 = sqrt(c1);
+       double c3 = (c1*c2);
+   
+       if(fabs(c1) < 0.0001){
+           cout << "ERROR - Division by Zero" << endl;
+           return Hj;
+       }
+       // compute jacobian matrix
+       Hj << (px/c2), (py/c2), 0, 0,
+               -(py/c1), (px/c1), 0, 0,
+               py*(vx*py - vy*px)/c3, px*(px*vy - py*vx)/c3, px/c2, py/c2;
+   
+       return Hj;
+   
+   }
+   ```
+
+   
 
 ## Editor Settings
 
